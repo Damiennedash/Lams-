@@ -1,0 +1,606 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { Package, Download, Loader, MessageCircle, X, Send, Phone } from 'lucide-react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
+import Header from '@/components/layout/Header'
+import Footer from '@/components/layout/Footer'
+import OrderTracker from '@/components/shop/OrderTracker'
+import type { Order } from '@/types'
+import { formatPrice, formatDate, getStatusLabel } from '@/lib/utils'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Message {
+  id: string
+  orderId: string
+  content: string
+  isAdmin: boolean
+  createdAt: string
+  sender: { id: string; name: string; role: string }
+}
+
+// ─── Download button ──────────────────────────────────────────────────────────
+
+function DownloadButton({ order }: { order: Order }) {
+  const [loading, setLoading] = useState(false)
+
+  const handleDownload = async () => {
+    setLoading(true)
+    try {
+      const { downloadInvoicePDF } = await import('@/lib/generateInvoicePDF')
+      await downloadInvoicePDF(order)
+      toast.success('Facture PDF téléchargée')
+    } catch (e) {
+      console.error(e)
+      toast.error('Erreur lors de la génération du PDF')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={loading}
+      className="flex items-center gap-1.5 text-[11px] tracking-widest text-lams-gray hover:text-lams-dark border border-lams-border hover:border-lams-dark px-3 py-1.5 transition-all disabled:opacity-50"
+      title="Télécharger la facture PDF"
+    >
+      {loading ? <Loader size={13} className="animate-spin" /> : <Download size={13} />}
+      {loading ? 'PDF...' : 'FACTURE PDF'}
+    </button>
+  )
+}
+
+// ─── Chat panel ───────────────────────────────────────────────────────────────
+
+function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: {
+  order: Order
+  onClose: () => void
+  initialTab?: 'VENDOR' | 'LIVREUR'
+  initialText?: string
+}) {
+  const { data: session } = useSession()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [tab, setTab] = useState<'VENDOR' | 'LIVREUR'>(initialTab)
+  const [text, setText] = useState(initialText)
+  const [sending, setSending] = useState(false)
+  const [livreurSentIds, setLivreurSentIds] = useState<Set<string>>(new Set())
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const myId = (session?.user as any)?.id
+
+  useEffect(() => {
+    fetch(`/api/messages?orderId=${order.id}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.messages) setMessages(d.messages) })
+  }, [order.id])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent<Message>).detail
+      if (msg.orderId === order.id) {
+        setMessages((prev) => {
+          if (prev.find((m) => m.id === msg.id)) return prev
+          return [...prev, msg]
+        })
+      }
+    }
+    window.addEventListener('lams:newMessage', handler)
+    return () => window.removeEventListener('lams:newMessage', handler)
+  }, [order.id])
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tab])
+
+  // Filter messages by tab
+  // Client messages sent before this session default to VENDOR tab
+  // Messages sent from LIVREUR tab are tracked in livreurSentIds
+  const filtered = messages.filter((m) => {
+    if (m.sender.id === myId) {
+      return tab === 'LIVREUR' ? livreurSentIds.has(m.id) : !livreurSentIds.has(m.id)
+    }
+    return tab === 'LIVREUR' ? m.sender.role === 'LIVREUR' : m.sender.role === 'ADMIN'
+  })
+
+  const send = async () => {
+    if (!text.trim()) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, content: text.trim() }),
+      })
+      const data = await res.json()
+      if (data.message) {
+        if (tab === 'LIVREUR') {
+          setLivreurSentIds((prev) => new Set([...prev, data.message.id]))
+        }
+        setMessages((prev) => [...prev, data.message])
+        setText('')
+      }
+    } catch {
+      toast.error('Erreur envoi message')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const hasLivreur = !!(order as any).deliveryName
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
+      <div className="w-full sm:max-w-md bg-white flex flex-col" style={{ height: '70vh' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-lams-dark text-lams-cream">
+          <div>
+            <p className="text-xs tracking-widest opacity-60">COMMANDE</p>
+            <p className="font-mono font-bold text-sm">#{order.id.slice(-8).toUpperCase()}</p>
+          </div>
+          <button onClick={onClose}><X size={18} /></button>
+        </div>
+
+        {/* Tabs VENDEUR / LIVREUR */}
+        {hasLivreur && (
+          <div className="flex border-b border-lams-border">
+            <button
+              onClick={() => setTab('VENDOR')}
+              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
+                tab === 'VENDOR' ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
+              }`}
+            >
+              💬 VENDEUR
+            </button>
+            <button
+              onClick={() => setTab('LIVREUR')}
+              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
+                tab === 'LIVREUR' ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
+              }`}
+            >
+              🚚 LIVREUR
+            </button>
+          </div>
+        )}
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-lams-cream/30">
+          {filtered.length === 0 && (
+            <p className="text-center text-xs text-lams-gray py-8">
+              {tab === 'LIVREUR' ? 'Aucun message avec le livreur.' : 'Aucun message. Écrivez au vendeur !'}
+            </p>
+          )}
+          {filtered.map((msg) => {
+            const isMe = msg.sender.id === myId
+            const senderLabel = msg.sender.role === 'LIVREUR' ? 'LIVREUR' : 'VENDEUR'
+            return (
+              <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[75%] px-3 py-2 text-sm ${
+                  isMe ? 'bg-lams-dark text-lams-cream' : 'bg-white border border-lams-border text-lams-dark'
+                }`}>
+                  {!isMe && (
+                    <p className={`text-[10px] tracking-widest mb-1 ${
+                      msg.sender.role === 'LIVREUR' ? 'text-blue-500' : 'text-lams-gold'
+                    }`}>
+                      {senderLabel}
+                    </p>
+                  )}
+                  <p className="leading-relaxed">{msg.content}</p>
+                  <p className={`text-[10px] mt-1 ${isMe ? 'text-lams-cream/50 text-right' : 'text-lams-gray'}`}>
+                    {new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="flex border-t border-lams-border bg-white">
+          <input
+            className="flex-1 px-4 py-3 text-sm text-lams-dark outline-none bg-transparent"
+            placeholder={tab === 'LIVREUR' ? 'Message au livreur...' : 'Message au vendeur...'}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+          />
+          <button
+            onClick={send}
+            disabled={sending || !text.trim()}
+            className="px-4 text-lams-dark hover:text-lams-gold disabled:opacity-40 transition-colors"
+          >
+            {sending ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function OrdersPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [chatOrder, setChatOrder] = useState<Order | null>(null)
+  const [chatInitTab, setChatInitTab] = useState<'VENDOR' | 'LIVREUR'>('VENDOR')
+  const [chatInitText, setChatInitText] = useState('')
+  const [unreadMap, setUnreadMap] = useState<Record<string, number>>({})
+  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [ratingOrder, setRatingOrder] = useState<Order | null>(null)
+  const [ratingVal, setRatingVal] = useState(0)
+  const [ratingComment, setRatingComment] = useState('')
+  const [submittingRating, setSubmittingRating] = useState(false)
+
+  useEffect(() => {
+    if (status === 'unauthenticated') { router.push('/login'); return }
+    if (status === 'authenticated') {
+      fetch('/api/orders')
+        .then((r) => r.json())
+        .then((data) => { if (data.orders) setOrders(data.orders) })
+        .finally(() => setLoading(false))
+    }
+  }, [status, router])
+
+  // Real-time order updates (status + paymentStatus + delivery info)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === detail.id
+            ? {
+                ...o,
+                ...(detail.status !== undefined && { status: detail.status }),
+                ...(detail.paymentStatus !== undefined && { paymentStatus: detail.paymentStatus }),
+                ...(detail.deliveryName !== undefined && { deliveryName: detail.deliveryName }),
+                ...(detail.deliveryPhone !== undefined && { deliveryPhone: detail.deliveryPhone }),
+              }
+            : o
+        )
+      )
+    }
+    window.addEventListener('lams:orderUpdated', handler)
+    return () => window.removeEventListener('lams:orderUpdated', handler)
+  }, [])
+
+  // Badge rouge sur MESSAGE quand nouveau message reçu
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail
+      if (!msg?.orderId) return
+      setChatOrder((current) => {
+        // Si ce chat est déjà ouvert, pas de badge
+        if (current?.id === msg.orderId) return current
+        setUnreadMap((prev) => ({ ...prev, [msg.orderId]: (prev[msg.orderId] || 0) + 1 }))
+        return current
+      })
+    }
+    window.addEventListener('lams:newMessage', handler)
+    return () => window.removeEventListener('lams:newMessage', handler)
+  }, [])
+
+  const cancelOrder = async (orderId: string) => {
+    if (!confirm('Annuler cette commande ?')) return
+    setCancelling(orderId)
+    try {
+      const res = await fetch(`/api/orders/${orderId}/cancel`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? 'Erreur')
+      } else {
+        toast.success('Commande annulée')
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: 'CANCELLED' } : o)))
+      }
+    } catch {
+      toast.error('Erreur réseau')
+    } finally {
+      setCancelling(null)
+    }
+  }
+
+  const submitRating = async () => {
+    if (!ratingOrder || ratingVal === 0) return
+    setSubmittingRating(true)
+    const res = await fetch(`/api/orders/${ratingOrder.id}/rate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating: ratingVal, ratingComment }),
+    })
+    if (res.ok) {
+      toast.success('Merci pour votre note !')
+      setOrders(prev => prev.map(o => o.id === ratingOrder!.id ? { ...o, rating: ratingVal } as any : o))
+      setRatingOrder(null); setRatingVal(0); setRatingComment('')
+    } else {
+      toast.error('Erreur')
+    }
+    setSubmittingRating(false)
+  }
+
+  const clientName = (session?.user as any)?.name ?? 'Client'
+
+  return (
+    <>
+      <Header />
+      <main className="min-h-screen bg-lams-cream">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
+          <h1 className="font-serif text-3xl text-lams-dark mb-8">Mes Commandes</h1>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-24">
+              <div className="w-8 h-8 border-2 border-lams-dark/20 border-t-lams-dark rounded-full animate-spin" />
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <Package size={64} className="text-lams-border mb-6" />
+              <h2 className="text-xl text-lams-dark mb-3">Aucune commande</h2>
+              <p className="text-lams-gray text-sm mb-8">Commencez vos achats dès maintenant !</p>
+              <Link href="/" className="btn-dark">DÉCOUVRIR LA BOUTIQUE</Link>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {orders.map((order) => {
+                const canCancel = ['PENDING', 'CONFIRMED'].includes(order.status)
+                const isShipped = order.status === 'SHIPPED' || order.status === 'DELIVERED'
+                const mapsLink = (order as any).deliveryLat && (order as any).deliveryLng
+                  ? `https://www.google.com/maps?q=${(order as any).deliveryLat},${(order as any).deliveryLng}`
+                  : null
+                const greetingMsg = `Bonjour, je suis ${clientName}, client de la commande #${order.id.slice(-8).toUpperCase()}. Je vous contacte au sujet de ma livraison.${mapsLink ? `\nMon adresse : ${mapsLink}` : ''}`
+                const whatsappMsg = encodeURIComponent(greetingMsg)
+                const whatsappPhone = (order as any).deliveryPhone?.replace(/\D/g, '') ?? ''
+
+                return (
+                  <div key={order.id} className="bg-white shadow-sm">
+                    {/* Order header */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 p-5 border-b border-lams-border">
+                      <div>
+                        <p className="text-[10px] tracking-[0.3em] text-lams-gray">N° DE COMMANDE</p>
+                        <p className="font-mono font-bold text-lams-dark mt-0.5 text-base">
+                          #{order.id.slice(-8).toUpperCase()}
+                        </p>
+                      </div>
+
+                      <div className="hidden sm:block">
+                        <p className="text-[10px] tracking-[0.3em] text-lams-gray">DATE</p>
+                        <p className="text-sm text-lams-dark mt-0.5">{formatDate(order.createdAt)}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] tracking-[0.3em] text-lams-gray">TOTAL</p>
+                        <p className="font-semibold text-lams-dark mt-0.5 text-base">{formatPrice(order.total)}</p>
+                      </div>
+
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className={`text-[10px] tracking-widest px-3 py-1.5 border font-medium ${
+                          order.status === 'DELIVERED'  ? 'bg-green-50 text-green-700 border-green-200'
+                          : order.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border-red-200'
+                          : order.status === 'SHIPPED'   ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : order.status === 'CONFIRMED' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : 'bg-stone-50 text-stone-600 border-stone-200'
+                        }`}>
+                          {getStatusLabel(order.status).toUpperCase()}
+                        </span>
+
+                        <DownloadButton order={order} />
+
+                        {/* Message vendeur → onglet VENDEUR */}
+                        <button
+                          onClick={() => {
+                            setChatInitTab('VENDOR')
+                            setChatInitText('')
+                            setChatOrder(order)
+                            setUnreadMap(prev => { const n = { ...prev }; delete n[order.id]; return n })
+                          }}
+                          className="relative flex items-center gap-1.5 text-[11px] tracking-widest text-lams-gray hover:text-lams-dark border border-lams-border hover:border-lams-dark px-3 py-1.5 transition-all"
+                          title="Contacter le vendeur"
+                        >
+                          <MessageCircle size={13} />
+                          MESSAGE
+                          {unreadMap[order.id] > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+                              {unreadMap[order.id]}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Notation livraison */}
+                        {order.status === 'DELIVERED' && !(order as any).rating && (
+                          <button
+                            onClick={() => { setRatingOrder(order); setRatingVal(0) }}
+                            className="flex items-center gap-1.5 text-[11px] tracking-widest text-lams-gold hover:text-lams-dark border border-lams-gold/40 hover:border-lams-dark px-3 py-1.5 transition-all"
+                          >
+                            ★ NOTER
+                          </button>
+                        )}
+                        {(order as any).rating && (
+                          <span className="text-[11px] text-lams-gold tracking-wider">
+                            {'★'.repeat((order as any).rating)}{'☆'.repeat(5 - (order as any).rating)}
+                          </span>
+                        )}
+
+                        {/* Annuler */}
+                        {canCancel && (
+                          <button
+                            onClick={() => cancelOrder(order.id)}
+                            disabled={cancelling === order.id}
+                            className="flex items-center gap-1.5 text-[11px] tracking-widest text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 transition-all disabled:opacity-50"
+                          >
+                            {cancelling === order.id
+                              ? <Loader size={13} className="animate-spin" />
+                              : <X size={13} />
+                            }
+                            ANNULER
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress tracker */}
+                    <div className="px-5 pt-2 pb-0">
+                      <OrderTracker status={order.status} />
+                    </div>
+
+                    {/* Delivery person card (shown when SHIPPED or DELIVERED) */}
+                    {isShipped && (order as any).deliveryName && (
+                      <div className="mx-5 my-3 p-4 bg-blue-50 border border-blue-200 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] tracking-widest text-blue-500 mb-1">LIVREUR ASSIGNÉ</p>
+                          <p className="font-semibold text-lams-dark">{(order as any).deliveryName}</p>
+                          {(order as any).deliveryPhone && (
+                            <p className="text-sm text-lams-gray mt-0.5">{(order as any).deliveryPhone}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {(order as any).deliveryPhone && (
+                            <>
+                              {/* WhatsApp */}
+                              <a
+                                href={`https://wa.me/${whatsappPhone}?text=${whatsappMsg}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 text-[11px] tracking-widest bg-green-500 text-white px-3 py-1.5 hover:bg-green-600 transition-colors"
+                              >
+                                <Phone size={13} />
+                                WHATSAPP
+                              </a>
+                              {/* Message in-platform → onglet LIVREUR + texte pré-rempli */}
+                              <button
+                                onClick={() => {
+                                  setChatInitTab('LIVREUR')
+                                  setChatInitText(greetingMsg)
+                                  setChatOrder(order)
+                                  setUnreadMap(prev => { const n = { ...prev }; delete n[order.id]; return n })
+                                }}
+                                className="flex items-center gap-1.5 text-[11px] tracking-widest text-lams-dark border border-lams-dark px-3 py-1.5 hover:bg-lams-dark hover:text-lams-cream transition-all"
+                              >
+                                <MessageCircle size={13} />
+                                ÉCRIRE
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Items */}
+                    <div className="divide-y divide-lams-border/50">
+                      {order.items.map((item) => (
+                        <div key={item.id} className="flex items-center gap-4 px-5 py-3">
+                          {item.image ? (
+                            <div className="relative w-12 h-14 bg-lams-cream flex-shrink-0 overflow-hidden">
+                              <Image src={item.image} alt={item.name} fill className="object-cover" sizes="48px" />
+                            </div>
+                          ) : (
+                            <div className="w-12 h-14 bg-lams-cream flex items-center justify-center flex-shrink-0">
+                              <Package size={16} className="text-lams-lightgray" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-lams-dark truncate">{item.name}</p>
+                            <p className="text-[11px] text-lams-gray mt-0.5">
+                              Qté : {item.quantity}
+                              {item.color && (
+                                <span className="inline-flex items-center gap-1 ml-2">
+                                  · <span className="w-2.5 h-2.5 rounded-full inline-block border border-lams-border" style={{ backgroundColor: item.color }} />
+                                  {item.color}
+                                </span>
+                              )}
+                              {item.size && ` · T. ${item.size}`}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-lams-dark flex-shrink-0">
+                            {formatPrice(item.price * item.quantity)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Payment footer */}
+                    <div className="px-5 py-3 bg-lams-cream/40 flex flex-wrap gap-4 text-[11px] text-lams-gray tracking-wider border-t border-lams-border">
+                      <span>PAIEMENT : {order.paymentMethod}</span>
+                      <span>·</span>
+                      <span className={
+                        order.paymentStatus === 'PAID'   ? 'text-green-600 font-medium'
+                        : order.paymentStatus === 'FAILED' ? 'text-red-500 font-medium'
+                        : 'text-amber-600'
+                      }>
+                        {order.paymentStatus === 'PAID' ? '✓ PAYÉ' : order.paymentStatus === 'FAILED' ? '✗ ÉCHOUÉ' : '⏳ EN ATTENTE'}
+                      </span>
+                      {order.deliveryAddress && (
+                        <>
+                          <span>·</span>
+                          <span className="truncate max-w-xs">{order.deliveryAddress}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </main>
+      <Footer />
+
+      {/* Chat modal */}
+      {chatOrder && (
+        <ChatPanel
+          order={chatOrder}
+          onClose={() => { setChatOrder(null); setChatInitText('') }}
+          initialTab={chatInitTab}
+          initialText={chatInitText}
+        />
+      )}
+
+      {/* Rating modal */}
+      {ratingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-lams-border">
+              <p className="font-semibold text-lams-dark">Noter la livraison</p>
+              <button onClick={() => { setRatingOrder(null); setRatingVal(0); setRatingComment('') }}><X size={18} className="text-lams-gray" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-lams-gray">Commande #{ratingOrder.id.slice(-8).toUpperCase()}</p>
+              <div>
+                <p className="text-[11px] tracking-widest text-lams-gray mb-2">VOTRE NOTE</p>
+                <div className="flex gap-2">
+                  {[1,2,3,4,5].map(star => (
+                    <button
+                      key={star}
+                      onClick={() => setRatingVal(star)}
+                      className={`text-3xl transition-transform hover:scale-110 ${star <= ratingVal ? 'text-lams-gold' : 'text-lams-border'}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">COMMENTAIRE (optionnel)</label>
+                <textarea
+                  className="input-field resize-none text-sm"
+                  rows={3}
+                  placeholder="Votre avis sur la livraison..."
+                  value={ratingComment}
+                  onChange={e => setRatingComment(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-3">
+              <button onClick={() => { setRatingOrder(null); setRatingVal(0) }} className="btn-outline flex-1">ANNULER</button>
+              <button onClick={submitRating} disabled={ratingVal === 0 || submittingRating} className="btn-dark flex-1 disabled:opacity-50">
+                {submittingRating ? <Loader size={15} className="animate-spin mx-auto" /> : 'ENVOYER'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
