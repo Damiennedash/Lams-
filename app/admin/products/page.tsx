@@ -9,7 +9,7 @@ import { formatPrice, getCategoryLabel, parseImages, parseArray } from '@/lib/ut
 import ImageUpload from '@/components/ui/ImageUpload'
 
 const emptyForm = {
-  name: '', description: '', price: '', category: 'VINTAGE' as const,
+  name: '', description: '', price: '', category: 'VINTAGE' as Product['category'],
   images: [] as string[], colors: '', sizes: '', stock: '', featured: false, active: true,
 }
 
