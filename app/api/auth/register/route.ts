@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
       message: 'Compte créé avec succès. Vérifiez vos emails pour votre ID unique.',
       uniqueId,
     })
-  } catch (err) {
-    console.error(err)
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  } catch (err: any) {
+    console.error('[REGISTER ERROR]', err)
+    return NextResponse.json({ error: err?.message ?? 'Erreur serveur' }, { status: 500 })
   }
 }
