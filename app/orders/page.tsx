@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Download, Loader, MessageCircle, X, Send, Phone, CreditCard, Pencil, Trash2, MapPin } from 'lucide-react'
+import { Package, Download, Loader, MessageCircle, X, Send, Phone, CreditCard, Pencil, Trash2, MapPin, Minus, Plus } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -232,8 +232,19 @@ function EditOrderModal({ order, onClose, onSaved }: {
   const [lat, setLat] = useState<number | null>((order as any).deliveryLat ?? null)
   const [lng, setLng] = useState<number | null>((order as any).deliveryLng ?? null)
   const [note, setNote] = useState((order as any).note ?? '')
+  const [localItems, setLocalItems] = useState(order.items.map(i => ({ ...i })))
   const [saving, setSaving] = useState(false)
   const [showMap, setShowMap] = useState(false)
+
+  const updateQty = (id: string, delta: number) => {
+    setLocalItems(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i))
+  }
+  const removeItem = (id: string) => {
+    if (localItems.length === 1) { toast.error('Au moins un article requis'); return }
+    setLocalItems(prev => prev.filter(i => i.id !== id))
+  }
+
+  const newTotal = localItems.reduce((s, i) => s + i.price * i.quantity, 0)
 
   const save = async () => {
     if (!address && !lat) { toast.error('Adresse requise'); return }
@@ -242,7 +253,13 @@ function EditOrderModal({ order, onClose, onSaved }: {
       const res = await fetch(`/api/orders/${order.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deliveryAddress: address, deliveryLat: lat, deliveryLng: lng, note }),
+        body: JSON.stringify({
+          deliveryAddress: address,
+          deliveryLat: lat,
+          deliveryLng: lng,
+          note,
+          items: localItems.map(i => ({ id: i.id, quantity: i.quantity })),
+        }),
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? 'Erreur'); return }
@@ -254,8 +271,8 @@ function EditOrderModal({ order, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white w-full max-w-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-lams-border">
+      <div className="bg-white w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-lams-border flex-shrink-0">
           <div>
             <p className="font-semibold text-lams-dark flex items-center gap-2">
               <Pencil size={15} className="text-lams-gold" /> Modifier la commande
@@ -264,7 +281,60 @@ function EditOrderModal({ order, onClose, onSaved }: {
           </div>
           <button onClick={onClose}><X size={18} className="text-lams-gray" /></button>
         </div>
-        <div className="p-5 space-y-4">
+
+        <div className="overflow-y-auto flex-1 p-5 space-y-5">
+          {/* Articles */}
+          <div>
+            <label className="text-[11px] tracking-widest text-lams-gray block mb-2">ARTICLES</label>
+            <div className="space-y-2">
+              {localItems.map(item => (
+                <div key={item.id} className="flex items-center gap-3 p-3 border border-lams-border">
+                  {item.image && (
+                    <div className="relative w-10 h-12 flex-shrink-0 bg-lams-cream overflow-hidden">
+                      <Image src={item.image} alt={item.name} fill className="object-cover" sizes="40px" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-lams-dark truncate">{item.name}</p>
+                    {(item.color || item.size) && (
+                      <p className="text-[10px] text-lams-gray">
+                        {item.color && item.color} {item.size && `· T.${item.size}`}
+                      </p>
+                    )}
+                    <p className="text-xs text-lams-gray">{formatPrice(item.price)} / u</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => updateQty(item.id, -1)}
+                      disabled={item.quantity <= 1}
+                      className="w-7 h-7 flex items-center justify-center border border-lams-border hover:bg-lams-cream disabled:opacity-30"
+                    >
+                      <Minus size={11} />
+                    </button>
+                    <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
+                    <button
+                      onClick={() => updateQty(item.id, 1)}
+                      className="w-7 h-7 flex items-center justify-center border border-lams-border hover:bg-lams-cream"
+                    >
+                      <Plus size={11} />
+                    </button>
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="w-7 h-7 flex items-center justify-center text-red-400 hover:text-red-600 ml-1"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between text-sm font-semibold mt-2 pt-2 border-t border-lams-border">
+              <span className="text-lams-gray">Nouveau total</span>
+              <span className="text-lams-dark">{formatPrice(newTotal)}</span>
+            </div>
+          </div>
+
+          {/* Address */}
           <div>
             <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">ADRESSE DE LIVRAISON *</label>
             <div className="flex gap-2">
@@ -295,6 +365,7 @@ function EditOrderModal({ order, onClose, onSaved }: {
             </div>
             {lat && <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1"><MapPin size={9} /> GPS enregistré</p>}
           </div>
+
           <div>
             <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">NOTE (optionnel)</label>
             <textarea
@@ -306,7 +377,8 @@ function EditOrderModal({ order, onClose, onSaved }: {
             />
           </div>
         </div>
-        <div className="px-5 pb-5 flex gap-3">
+
+        <div className="px-5 py-4 border-t border-lams-border flex gap-3 flex-shrink-0">
           <button onClick={onClose} className="btn-outline flex-1">ANNULER</button>
           <button onClick={save} disabled={saving} className="btn-dark flex-1 disabled:opacity-50">
             {saving ? <Loader size={15} className="animate-spin mx-auto" /> : 'ENREGISTRER'}

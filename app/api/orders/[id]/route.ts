@@ -21,9 +21,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Seules les commandes en attente ou confirmées peuvent être modifiées.' }, { status: 400 })
   }
 
-  const { deliveryAddress, deliveryLat, deliveryLng, note } = await req.json()
+  const { deliveryAddress, deliveryLat, deliveryLng, note, items } = await req.json()
   if (!deliveryAddress && !deliveryLat) {
     return NextResponse.json({ error: 'Adresse de livraison requise.' }, { status: 400 })
+  }
+
+  // Update item quantities if provided
+  let newTotal: number | undefined
+  if (Array.isArray(items) && items.length > 0) {
+    for (const item of items as { id: string; quantity: number }[]) {
+      if (item.quantity <= 0) {
+        await prisma.orderItem.delete({ where: { id: item.id } })
+      } else {
+        await prisma.orderItem.update({ where: { id: item.id }, data: { quantity: item.quantity } })
+      }
+    }
+    const remaining = await prisma.orderItem.findMany({ where: { orderId: params.id } })
+    if (remaining.length === 0) {
+      return NextResponse.json({ error: 'La commande doit contenir au moins un article.' }, { status: 400 })
+    }
+    newTotal = remaining.reduce((s, i) => s + i.price * i.quantity, 0)
   }
 
   const updated = await prisma.order.update({
@@ -33,6 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(deliveryLat  !== undefined && { deliveryLat }),
       ...(deliveryLng  !== undefined && { deliveryLng }),
       ...(note         !== undefined && { note }),
+      ...(newTotal     !== undefined && { total: newTotal }),
     },
     include: { items: true, user: { select: { name: true, email: true } } },
   })
