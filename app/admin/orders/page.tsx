@@ -355,10 +355,12 @@ export default function AdminOrdersPage() {
     window.addEventListener('lams:newMessage', msgHandler)
     window.addEventListener('lams:orderUpdated', orderHandler)
     window.addEventListener('lams:newOrder', newOrderHandler)
+    window.addEventListener('lams:poll', newOrderHandler)
     return () => {
       window.removeEventListener('lams:newMessage', msgHandler)
       window.removeEventListener('lams:orderUpdated', orderHandler)
       window.removeEventListener('lams:newOrder', newOrderHandler)
+      window.removeEventListener('lams:poll', newOrderHandler)
     }
   }, [filter])
 

@@ -232,7 +232,11 @@ export default function LivreurPage() {
       })
     }
     window.addEventListener('lams:newAssignment', h)
-    return () => window.removeEventListener('lams:newAssignment', h)
+    window.addEventListener('lams:poll', h)
+    return () => {
+      window.removeEventListener('lams:newAssignment', h)
+      window.removeEventListener('lams:poll', h)
+    }
   }, [])
 
   // Unread message badge — dedup by message ID to prevent any double-count

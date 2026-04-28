@@ -542,8 +542,19 @@ export default function OrdersPage() {
         )
       )
     }
+    // Polling fallback — refetch all orders every 20s (SSE can't cross Vercel instances)
+    const pollHandler = () => {
+      fetch('/api/orders')
+        .then(r => r.json())
+        .then(data => { if (data.orders) setOrders(data.orders) })
+        .catch(() => {})
+    }
     window.addEventListener('lams:orderUpdated', handler)
-    return () => window.removeEventListener('lams:orderUpdated', handler)
+    window.addEventListener('lams:poll', pollHandler)
+    return () => {
+      window.removeEventListener('lams:orderUpdated', handler)
+      window.removeEventListener('lams:poll', pollHandler)
+    }
   }, [])
 
   // Badge rouge sur MESSAGE quand nouveau message reçu

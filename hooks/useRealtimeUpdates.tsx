@@ -17,6 +17,15 @@ export function useRealtimeUpdates() {
   const { addNotification } = useNotificationStore()
   const esRef = useRef<EventSource | null>(null)
 
+  // Polling fallback — SSE events are lost on Vercel (separate serverless instances don't share the emitter)
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    const interval = setInterval(() => {
+      window.dispatchEvent(new CustomEvent('lams:poll'))
+    }, 20000)
+    return () => clearInterval(interval)
+  }, [status])
+
   useEffect(() => {
     if (status !== 'authenticated') return
 
