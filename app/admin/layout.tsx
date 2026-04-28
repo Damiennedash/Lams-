@@ -3,7 +3,10 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import AdminSidebar from '@/components/admin/AdminSidebar'
 
-export const metadata = { title: 'LAMS Admin' }
+export const metadata = {
+  title: 'LAMS Admin',
+  robots: { index: false, follow: false },
+}
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)

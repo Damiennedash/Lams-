@@ -44,10 +44,35 @@ export const metadata: Metadata = {
   icons: { icon: '/favicon.ico' },
 }
 
+const orgJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'LAMS Boutique',
+  url: siteUrl,
+  logo: `${siteUrl}/LAMS.jpg`,
+  description: 'Boutique de mode en ligne au Togo — vêtements vintage, stocks et collections exclusives LAMS.',
+  address: { '@type': 'PostalAddress', addressCountry: 'TG', addressLocality: 'Lomé' },
+}
+
+const websiteJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'LAMS Boutique',
+  url: siteUrl,
+  inLanguage: 'fr',
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: { '@type': 'EntryPoint', urlTemplate: `${siteUrl}/?search={search_term_string}` },
+    'query-input': 'required name=search_term_string',
+  },
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
       <body>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }} />
         <Providers>
           {children}
           <Toaster

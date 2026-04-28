@@ -36,5 +36,31 @@ export default async function ProductPage({ params }: { params: { id: string } }
   const product = await prisma.product.findUnique({ where: { id: params.id } })
   if (!product || !product.active) notFound()
 
-  return <ProductClient product={product as any} />
+  const images = parseImages(product.images as unknown as string)
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: product.description || `Découvrez ${product.name} sur LAMS Boutique.`,
+    image: images,
+    brand: { '@type': 'Brand', name: 'LAMS' },
+    offers: {
+      '@type': 'Offer',
+      price: product.price,
+      priceCurrency: 'XOF',
+      availability: (product.stock as number) > 0
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+      url: `${siteUrl}/products/${product.id}`,
+      seller: { '@type': 'Organization', name: 'LAMS Boutique' },
+    },
+  }
+
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <ProductClient product={product as any} />
+    </>
+  )
 }
