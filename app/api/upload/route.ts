@@ -39,13 +39,12 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    const base64 = Buffer.from(bytes).toString('base64')
+    const dataUri = `data:${file.type};base64,${base64}`
 
-    const result = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: 'lams-boutique', resource_type: 'image' },
-        (error, result) => { if (error) reject(error); else resolve(result) }
-      ).end(buffer)
+    const result = await cloudinary.uploader.upload(dataUri, {
+      folder: 'lams-boutique',
+      resource_type: 'image',
     })
 
     return NextResponse.json({ url: result.secure_url, success: true })
