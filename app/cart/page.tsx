@@ -30,10 +30,18 @@ export default function CartPage() {
   const [note, setNote] = useState('')
   const [ordering, setOrdering] = useState(false)
   const [showMap, setShowMap] = useState(false)
+  const [addressError, setAddressError] = useState(false)
 
   const handleCheckout = async () => {
     if (!session) { router.push('/login'); return }
     if (payMode === 'NOW' && !phone) { toast.error('Entrez votre numéro de téléphone'); return }
+    if (!address && !deliveryLat) {
+      toast.error('Veuillez indiquer votre adresse de livraison')
+      setAddressError(true)
+      setOrdering(false)
+      return
+    }
+    setAddressError(false)
 
     setOrdering(true)
     try {
@@ -260,15 +268,17 @@ export default function CartPage() {
 
                   {/* Address — always shown */}
                   <div>
-                    <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">ADRESSE DE LIVRAISON</label>
+                    <label className={`text-[11px] tracking-widest block mb-1.5 ${addressError ? 'text-red-500 font-semibold' : 'text-lams-gray'}`}>
+                      ADRESSE DE LIVRAISON *{addressError && ' — requis'}
+                    </label>
                     <div className="flex gap-2">
                       <div className="flex-1 relative">
                         <input
                           type="text"
                           value={address}
-                          onChange={(e) => { setAddress(e.target.value); setDeliveryLat(null); setDeliveryLng(null) }}
+                          onChange={(e) => { setAddress(e.target.value); setDeliveryLat(null); setDeliveryLng(null); setAddressError(false) }}
                           placeholder="Votre adresse de livraison"
-                          className="input-field pr-8 text-sm"
+                          className={`input-field pr-8 text-sm ${addressError ? 'border-red-400 ring-1 ring-red-300' : ''}`}
                         />
                         {address && (
                           <button

@@ -6,6 +6,47 @@ import { pushToUser } from '@/lib/sse'
 
 export const dynamic = 'force-dynamic'
 
+// PATCH — customer updates delivery info of their own PENDING order
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const userId = (session.user as any).id
+  const order = await prisma.order.findUnique({ where: { id: params.id } })
+
+  if (!order || order.userId !== userId) {
+    return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
+  }
+  if (order.status !== 'PENDING') {
+    return NextResponse.json({ error: 'Seules les commandes en attente peuvent être modifiées.' }, { status: 400 })
+  }
+
+  const { deliveryAddress, deliveryLat, deliveryLng, note } = await req.json()
+  if (!deliveryAddress && !deliveryLat) {
+    return NextResponse.json({ error: 'Adresse de livraison requise.' }, { status: 400 })
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: params.id },
+    data: {
+      ...(deliveryAddress !== undefined && { deliveryAddress }),
+      ...(deliveryLat  !== undefined && { deliveryLat }),
+      ...(deliveryLng  !== undefined && { deliveryLng }),
+      ...(note         !== undefined && { note }),
+    },
+    include: { items: true, user: { select: { name: true, email: true } } },
+  })
+
+  // Notify admins so they see the updated address
+  const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
+  admins.forEach(a => pushToUser(a.id, {
+    type: 'order_update',
+    orderUpdate: { id: updated.id, status: updated.status },
+  }))
+
+  return NextResponse.json({ order: updated })
+}
+
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })

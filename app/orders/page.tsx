@@ -3,15 +3,18 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Download, Loader, MessageCircle, X, Send, Phone, CreditCard } from 'lucide-react'
+import { Package, Download, Loader, MessageCircle, X, Send, Phone, CreditCard, Pencil, Trash2, MapPin } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import dynamic from 'next/dynamic'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import OrderTracker from '@/components/shop/OrderTracker'
 import type { Order } from '@/types'
 import { formatPrice, formatDate, getStatusLabel } from '@/lib/utils'
+
+const LocationPicker = dynamic(() => import('@/components/ui/LocationPicker'), { ssr: false })
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -218,6 +221,109 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
   )
 }
 
+// ─── Edit order modal ────────────────────────────────────────────────────────
+
+function EditOrderModal({ order, onClose, onSaved }: {
+  order: Order
+  onClose: () => void
+  onSaved: (updated: Order) => void
+}) {
+  const [address, setAddress] = useState((order as any).deliveryAddress ?? '')
+  const [lat, setLat] = useState<number | null>((order as any).deliveryLat ?? null)
+  const [lng, setLng] = useState<number | null>((order as any).deliveryLng ?? null)
+  const [note, setNote] = useState((order as any).note ?? '')
+  const [saving, setSaving] = useState(false)
+  const [showMap, setShowMap] = useState(false)
+
+  const save = async () => {
+    if (!address && !lat) { toast.error('Adresse requise'); return }
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deliveryAddress: address, deliveryLat: lat, deliveryLng: lng, note }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? 'Erreur'); return }
+      toast.success('Commande mise à jour !')
+      onSaved(data.order)
+      onClose()
+    } catch { toast.error('Erreur réseau') } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-lams-border">
+          <div>
+            <p className="font-semibold text-lams-dark flex items-center gap-2">
+              <Pencil size={15} className="text-lams-gold" /> Modifier la commande
+            </p>
+            <p className="text-[11px] text-lams-gray font-mono mt-0.5">#{order.id.slice(-8).toUpperCase()}</p>
+          </div>
+          <button onClick={onClose}><X size={18} className="text-lams-gray" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">ADRESSE DE LIVRAISON *</label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => { setAddress(e.target.value); setLat(null); setLng(null) }}
+                  placeholder="Votre adresse"
+                  className="input-field pr-8 text-sm"
+                />
+                {address && (
+                  <button type="button" onClick={() => { setAddress(''); setLat(null); setLng(null) }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-lams-gray hover:text-lams-dark">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMap(true)}
+                className={`flex-shrink-0 flex items-center justify-center w-10 h-10 border transition-all ${
+                  lat ? 'bg-green-50 border-green-400 text-green-600' : 'border-lams-border text-lams-gray hover:border-lams-dark'
+                }`}
+              >
+                <MapPin size={16} />
+              </button>
+            </div>
+            {lat && <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1"><MapPin size={9} /> GPS enregistré</p>}
+          </div>
+          <div>
+            <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">NOTE (optionnel)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="input-field resize-none text-sm"
+              placeholder="Instructions spéciales..."
+            />
+          </div>
+        </div>
+        <div className="px-5 pb-5 flex gap-3">
+          <button onClick={onClose} className="btn-outline flex-1">ANNULER</button>
+          <button onClick={save} disabled={saving} className="btn-dark flex-1 disabled:opacity-50">
+            {saving ? <Loader size={15} className="animate-spin mx-auto" /> : 'ENREGISTRER'}
+          </button>
+        </div>
+      </div>
+
+      {showMap && (
+        <LocationPicker
+          onSelect={(loc) => { setAddress(loc.address); setLat(loc.lat); setLng(loc.lng); setShowMap(false) }}
+          onClose={() => setShowMap(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 // ─── Payment modal ───────────────────────────────────────────────────────────
 
 function PaymentModal({ order, onClose, onPaid }: {
@@ -334,6 +440,7 @@ export default function OrdersPage() {
   const [ratingComment, setRatingComment] = useState('')
   const [submittingRating, setSubmittingRating] = useState(false)
   const [payingOrder, setPayingOrder] = useState<Order | null>(null)
+  const [editOrder, setEditOrder] = useState<Order | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') { router.push('/login'); return }
@@ -532,7 +639,18 @@ export default function OrdersPage() {
                           </span>
                         )}
 
-                        {/* Annuler */}
+                        {/* Modifier (PENDING seulement) */}
+                        {order.status === 'PENDING' && (
+                          <button
+                            onClick={() => setEditOrder(order)}
+                            className="flex items-center gap-1.5 text-[11px] tracking-widest text-lams-dark border border-lams-border hover:border-lams-dark px-3 py-1.5 transition-all"
+                          >
+                            <Pencil size={13} />
+                            MODIFIER
+                          </button>
+                        )}
+
+                        {/* Supprimer / Annuler */}
                         {canCancel && (
                           <button
                             onClick={() => cancelOrder(order.id)}
@@ -541,9 +659,9 @@ export default function OrdersPage() {
                           >
                             {cancelling === order.id
                               ? <Loader size={13} className="animate-spin" />
-                              : <X size={13} />
+                              : <Trash2 size={13} />
                             }
-                            ANNULER
+                            SUPPRIMER
                           </button>
                         )}
                       </div>
@@ -655,6 +773,18 @@ export default function OrdersPage() {
         </div>
       </main>
       <Footer />
+
+      {/* Edit order modal */}
+      {editOrder && (
+        <EditOrderModal
+          order={editOrder}
+          onClose={() => setEditOrder(null)}
+          onSaved={(updated) => {
+            setOrders(prev => prev.map(o => o.id === updated.id ? { ...o, ...updated } : o))
+            setEditOrder(null)
+          }}
+        />
+      )}
 
       {/* Payment modal */}
       {payingOrder && (
