@@ -1,8 +1,18 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import EventPopup from '@/components/shop/EventPopup'
 import HomeClient from '@/components/shop/HomeClient'
+
+export const metadata: Metadata = {
+  title: 'Boutique de Mode – Vintage, Stocks & Collections',
+  description: 'Explorez les collections LAMS : pièces vintage uniques, stocks tendance et collections exclusives. Commandez en ligne, livraison au Togo.',
+  openGraph: {
+    title: 'LAMS – Boutique de Mode',
+    description: 'Explorez les collections LAMS : pièces vintage uniques, stocks tendance et collections exclusives.',
+  },
+}
 
 function HomeLoading() {
   return (

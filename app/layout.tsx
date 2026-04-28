@@ -3,9 +3,44 @@ import './globals.css'
 import Providers from '@/components/Providers'
 import { Toaster } from 'react-hot-toast'
 
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lams-boutique.com'
+
 export const metadata: Metadata = {
-  title: 'LAMS – Boutique de Mode',
-  description: 'Vintage, stocks et collections exclusives LAMS',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'LAMS – Boutique de Mode',
+    template: '%s | LAMS',
+  },
+  description: 'Découvrez les collections LAMS : vêtements vintage, stocks et pièces exclusives. Livraison partout au Togo.',
+  keywords: ['LAMS', 'boutique mode', 'vintage', 'vêtements', 'Togo', 'Lomé', 'fashion', 'stocks'],
+  authors: [{ name: 'LAMS Boutique' }],
+  creator: 'LAMS',
+  openGraph: {
+    type: 'website',
+    locale: 'fr_TG',
+    url: siteUrl,
+    siteName: 'LAMS Boutique',
+    title: 'LAMS – Boutique de Mode',
+    description: 'Découvrez les collections LAMS : vêtements vintage, stocks et pièces exclusives.',
+    images: [{ url: '/og-image.jpg', width: 1200, height: 630, alt: 'LAMS Boutique' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'LAMS – Boutique de Mode',
+    description: 'Découvrez les collections LAMS : vêtements vintage, stocks et pièces exclusives.',
+    images: ['/og-image.jpg'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
   icons: { icon: '/favicon.ico' },
 }
 
