@@ -59,17 +59,22 @@ function DownloadButton({ order }: { order: Order }) {
 
 // ─── Chat panel ───────────────────────────────────────────────────────────────
 
-function ChatPanel({ order, onClose, initialText = '' }: {
+function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: {
   order: Order
   onClose: () => void
+  initialTab?: 'VENDOR' | 'LIVREUR'
   initialText?: string
 }) {
   const { data: session } = useSession()
   const [messages, setMessages] = useState<Message[]>([])
+  const [tab, setTab] = useState<'VENDOR' | 'LIVREUR'>(initialTab)
   const [text, setText] = useState(initialText)
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const myId = (session?.user as any)?.id
+  const hasLivreur = !!(order as any).deliveryName
+
+  useEffect(() => { setTab(initialTab) }, [initialTab])
 
   useEffect(() => {
     fetch(`/api/messages?orderId=${order.id}`)
@@ -91,7 +96,16 @@ function ChatPanel({ order, onClose, initialText = '' }: {
     return () => window.removeEventListener('lams:newMessage', handler)
   }, [order.id])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tab])
+
+  // VENDOR tab: admin messages + my messages to admin (toRole='ADMIN' or legacy null)
+  // LIVREUR tab: livreur messages + my messages to livreur (toRole='LIVREUR')
+  const filtered = messages.filter((m) => {
+    if (tab === 'LIVREUR') {
+      return m.sender.role === 'LIVREUR' || (m.sender.id === myId && m.toRole === 'LIVREUR')
+    }
+    return m.sender.role === 'ADMIN' || (m.sender.id === myId && m.toRole !== 'LIVREUR')
+  })
 
   const send = async () => {
     if (!text.trim()) return
@@ -100,7 +114,11 @@ function ChatPanel({ order, onClose, initialText = '' }: {
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id, content: text.trim() }),
+        body: JSON.stringify({
+          orderId: order.id,
+          content: text.trim(),
+          toRole: tab === 'LIVREUR' ? 'LIVREUR' : 'ADMIN',
+        }),
       })
       const data = await res.json()
       if (data.message) {
@@ -126,12 +144,36 @@ function ChatPanel({ order, onClose, initialText = '' }: {
           <button onClick={onClose}><X size={18} /></button>
         </div>
 
+        {/* Tabs — affiché seulement si un livreur est assigné */}
+        {hasLivreur && (
+          <div className="flex border-b border-lams-border">
+            <button
+              onClick={() => setTab('VENDOR')}
+              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
+                tab === 'VENDOR' ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
+              }`}
+            >
+              💬 VENDEUR
+            </button>
+            <button
+              onClick={() => setTab('LIVREUR')}
+              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
+                tab === 'LIVREUR' ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
+              }`}
+            >
+              🚚 LIVREUR
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-lams-cream/30">
-          {messages.length === 0 && (
-            <p className="text-center text-xs text-lams-gray py-8">Aucun message. Écrivez au vendeur !</p>
+          {filtered.length === 0 && (
+            <p className="text-center text-xs text-lams-gray py-8">
+              {tab === 'LIVREUR' ? 'Aucun message avec le livreur.' : 'Aucun message. Écrivez au vendeur !'}
+            </p>
           )}
-          {messages.map((msg) => {
+          {filtered.map((msg) => {
             const isMe = msg.sender.id === myId
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -158,7 +200,7 @@ function ChatPanel({ order, onClose, initialText = '' }: {
         <div className="flex border-t border-lams-border bg-white">
           <input
             className="flex-1 px-4 py-3 text-sm text-lams-dark outline-none bg-transparent"
-            placeholder="Message au vendeur..."
+            placeholder={tab === 'LIVREUR' ? 'Message au livreur...' : 'Message au vendeur...'}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
@@ -283,6 +325,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [chatOrder, setChatOrder] = useState<Order | null>(null)
+  const [chatInitTab, setChatInitTab] = useState<'VENDOR' | 'LIVREUR'>('VENDOR')
   const [chatInitText, setChatInitText] = useState('')
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({})
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -457,6 +500,7 @@ export default function OrdersPage() {
                         {/* Message vendeur */}
                         <button
                           onClick={() => {
+                            setChatInitTab('VENDOR')
                             setChatInitText('')
                             setChatOrder(order)
                             setUnreadMap(prev => { const n = { ...prev }; delete n[order.id]; return n })
@@ -533,9 +577,10 @@ export default function OrdersPage() {
                                 <Phone size={13} />
                                 WHATSAPP
                               </a>
-                              {/* Message vendeur (texte pré-rempli) */}
+                              {/* Message livreur → onglet LIVREUR pré-sélectionné */}
                               <button
                                 onClick={() => {
+                                  setChatInitTab('LIVREUR')
                                   setChatInitText(greetingMsg)
                                   setChatOrder(order)
                                   setUnreadMap(prev => { const n = { ...prev }; delete n[order.id]; return n })
@@ -629,6 +674,7 @@ export default function OrdersPage() {
         <ChatPanel
           order={chatOrder}
           onClose={() => { setChatOrder(null); setChatInitText('') }}
+          initialTab={chatInitTab}
           initialText={chatInitText}
         />
       )}

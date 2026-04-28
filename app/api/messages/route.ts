@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
     // Livreur can message client (CLIENT tab) or admin (ADMIN tab)
     resolvedToRole = toRole === 'CUSTOMER' ? 'CUSTOMER' : 'ADMIN'
   } else {
-    // Customer always messages admin
-    resolvedToRole = 'ADMIN'
+    // Customer can message admin (VENDOR tab) or livreur (LIVREUR tab)
+    resolvedToRole = toRole === 'LIVREUR' ? 'LIVREUR' : 'ADMIN'
   }
 
   const message = await prisma.message.create({
@@ -141,9 +141,16 @@ export async function POST(req: NextRequest) {
       admins.forEach(a => pushToUser(a.id, ssePayload))
     }
   } else {
-    // Customer → admin: push to admins only (NOT livreur)
-    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
-    admins.forEach(a => pushToUser(a.id, ssePayload))
+    if (resolvedToRole === 'LIVREUR') {
+      // Customer → livreur: push to livreur + admins (monitoring)
+      if (order.delivererId) pushToUser(order.delivererId, ssePayload)
+      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
+      admins.forEach(a => pushToUser(a.id, ssePayload))
+    } else {
+      // Customer → admin: push to admins only
+      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
+      admins.forEach(a => pushToUser(a.id, ssePayload))
+    }
   }
 
   return NextResponse.json({ message })

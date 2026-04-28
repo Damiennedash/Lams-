@@ -53,10 +53,12 @@ function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClo
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tab])
 
-  // CLIENT tab: livreur's messages to client (toRole='CUSTOMER')
-  // ADMIN tab: livreur's messages to admin (toRole='ADMIN') + admin's messages to livreur (toRole='LIVREUR')
+  // CLIENT tab: livreur↔client messages (livreur sent toRole='CUSTOMER' + client sent toRole='LIVREUR')
+  // ADMIN tab: livreur↔admin messages (livreur sent toRole='ADMIN' + admin sent toRole='LIVREUR')
   const filtered = messages.filter(m => {
-    if (tab === 'CLIENT') return m.sender.id === myId && m.toRole === 'CUSTOMER'
+    if (tab === 'CLIENT') {
+      return (m.sender.id === myId && m.toRole === 'CUSTOMER') || m.sender.role === 'CUSTOMER'
+    }
     return m.toRole === 'LIVREUR' || (m.sender.id === myId && m.toRole === 'ADMIN')
   })
 
