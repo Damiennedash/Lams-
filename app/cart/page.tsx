@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ShoppingBag, Trash2, Minus, Plus, Phone, Loader, MapPin, X } from 'lucide-react'
+import { ShoppingBag, Trash2, Minus, Plus, Phone, Loader, MapPin, X, CreditCard, Package } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -18,9 +18,10 @@ const LocationPicker = dynamic(() => import('@/components/ui/LocationPicker'), {
 export default function CartPage() {
   const { data: session } = useSession()
   const router = useRouter()
-  const { items, removeItem, updateQuantity, clearCart, total } = useCartStore()
+  const { items, removeItem, updateQuantity, clearCart } = useCartStore()
   const cartTotal = useCartStore((s) => s.total())
 
+  const [payMode, setPayMode] = useState<'NOW' | 'LATER'>('NOW')
   const [payOp, setPayOp] = useState<'MOOV' | 'YAS'>('MOOV')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
@@ -28,16 +29,14 @@ export default function CartPage() {
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const [ordering, setOrdering] = useState(false)
-  const [step, setStep] = useState<'cart' | 'payment'>('cart')
   const [showMap, setShowMap] = useState(false)
 
   const handleCheckout = async () => {
     if (!session) { router.push('/login'); return }
-    if (!phone) { toast.error('Entrez votre numéro de téléphone'); return }
+    if (payMode === 'NOW' && !phone) { toast.error('Entrez votre numéro de téléphone'); return }
 
     setOrdering(true)
     try {
-      // 1. Create order
       const orderRes = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,7 +47,7 @@ export default function CartPage() {
             color: i.color,
             size: i.size,
           })),
-          paymentMethod: payOp,
+          paymentMethod: payMode === 'NOW' ? payOp : 'PLUS_TARD',
           deliveryAddress: address,
           deliveryLat,
           deliveryLng,
@@ -65,20 +64,22 @@ export default function CartPage() {
 
       const orderId = orderData.order.id
 
-      // 2. Initiate payment (fire — don't block redirect)
-      fetch('/api/payment/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, operator: payOp, phone }),
-      }).then(r => r.json()).then(payData => {
-        if (payData.success) {
-          toast.success(payData.message || 'Demande de paiement envoyée sur votre téléphone')
-        } else {
-          toast.error(payData.message || 'Vérifiez votre numéro et réessayez')
-        }
-      }).catch(() => {})
+      if (payMode === 'NOW') {
+        fetch('/api/payment/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, operator: payOp, phone }),
+        }).then(r => r.json()).then(payData => {
+          if (payData.success) {
+            toast.success(payData.message || 'Demande de paiement envoyée sur votre téléphone')
+          } else {
+            toast.error(payData.message || 'Vérifiez votre numéro et réessayez')
+          }
+        }).catch(() => {})
+      } else {
+        toast.success('Commande passée ! Vous pouvez payer depuis vos commandes.')
+      }
 
-      // 3. Redirect immediately — status updates in real-time via SSE
       clearCart()
       router.push('/orders')
     } catch {
@@ -179,108 +180,151 @@ export default function CartPage() {
                   </div>
                 </div>
 
-                {/* Payment */}
-                <div className="bg-white p-6">
-                  <h2 className="text-[11px] tracking-[0.3em] text-lams-gray mb-4">PAIEMENT MOBILE</h2>
+                {/* Checkout */}
+                <div className="bg-white p-6 space-y-4">
+                  <h2 className="text-[11px] tracking-[0.3em] text-lams-gray">FINALISER LA COMMANDE</h2>
 
-                  <div className="flex gap-2 mb-4">
-                    {(['MOOV', 'YAS'] as const).map((op) => (
-                      <button
-                        key={op}
-                        onClick={() => setPayOp(op)}
-                        className={`flex-1 py-3 text-sm font-medium border transition-colors ${
-                          payOp === op
-                            ? 'bg-lams-dark text-lams-cream border-lams-dark'
-                            : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
-                        }`}
-                      >
-                        {op === 'MOOV' ? 'MOOV MONEY' : 'YAS PAY'}
-                      </button>
-                    ))}
+                  {/* Mode selector */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPayMode('NOW')}
+                      className={`flex-1 py-3 text-xs font-semibold tracking-widest border transition-all flex flex-col items-center gap-1 ${
+                        payMode === 'NOW'
+                          ? 'bg-lams-dark text-lams-cream border-lams-dark'
+                          : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
+                      }`}
+                    >
+                      <CreditCard size={16} />
+                      PAYER MAINTENANT
+                    </button>
+                    <button
+                      onClick={() => setPayMode('LATER')}
+                      className={`flex-1 py-3 text-xs font-semibold tracking-widest border transition-all flex flex-col items-center gap-1 ${
+                        payMode === 'LATER'
+                          ? 'bg-lams-dark text-lams-cream border-lams-dark'
+                          : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
+                      }`}
+                    >
+                      <Package size={16} />
+                      COMMANDER D'ABORD
+                    </button>
                   </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">
-                        NUMÉRO {payOp === 'MOOV' ? 'MOOV' : 'YAS'} *
-                      </label>
-                      <div className="flex border border-lams-border bg-white overflow-hidden">
-                        <span className="flex items-center justify-center px-3 bg-lams-cream border-r border-lams-border flex-shrink-0">
-                          <Phone size={14} className="text-lams-gray" />
-                        </span>
-                        <input
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder="+228 XX XX XX XX"
-                          className="flex-1 px-3 py-2.5 text-sm outline-none bg-white text-lams-dark"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">ADRESSE DE LIVRAISON</label>
-                      <div className="flex gap-2">
-                        <div className="flex-1 relative">
-                          <input
-                            type="text"
-                            value={address}
-                            onChange={(e) => { setAddress(e.target.value); setDeliveryLat(null); setDeliveryLng(null) }}
-                            placeholder="Votre adresse de livraison"
-                            className="input-field pr-8 text-sm"
-                          />
-                          {address && (
+                  {payMode === 'LATER' && (
+                    <p className="text-[11px] text-lams-gray bg-amber-50 border border-amber-200 px-3 py-2">
+                      Commandez maintenant et payez plus tard depuis vos commandes.
+                    </p>
+                  )}
+
+                  {/* Operator selector — only when paying now */}
+                  {payMode === 'NOW' && (
+                    <>
+                      <div>
+                        <label className="text-[11px] tracking-widest text-lams-gray block mb-2">OPÉRATEUR MOBILE</label>
+                        <div className="flex gap-2">
+                          {(['MOOV', 'YAS'] as const).map((op) => (
                             <button
-                              type="button"
-                              onClick={() => { setAddress(''); setDeliveryLat(null); setDeliveryLng(null) }}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-lams-gray hover:text-lams-dark"
+                              key={op}
+                              onClick={() => setPayOp(op)}
+                              className={`flex-1 py-2.5 text-sm font-medium border transition-colors ${
+                                payOp === op
+                                  ? 'bg-lams-dark text-lams-cream border-lams-dark'
+                                  : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
+                              }`}
                             >
-                              <X size={13} />
+                              {op === 'MOOV' ? 'MOOV MONEY' : 'YAS PAY'}
                             </button>
-                          )}
+                          ))}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowMap(true)}
-                          title="Choisir sur la carte"
-                          className={`flex-shrink-0 flex items-center justify-center w-10 h-10 border transition-all ${
-                            deliveryLat ? 'bg-green-50 border-green-400 text-green-600' : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
-                          }`}
-                        >
-                          <MapPin size={16} />
-                        </button>
                       </div>
-                      {deliveryLat && (
-                        <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
-                          <MapPin size={10} /> Position GPS enregistrée
-                        </p>
-                      )}
+
+                      <div>
+                        <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">
+                          NUMÉRO {payOp === 'MOOV' ? 'MOOV' : 'YAS'} *
+                        </label>
+                        <div className="flex border border-lams-border bg-white overflow-hidden">
+                          <span className="flex items-center justify-center px-3 bg-lams-cream border-r border-lams-border flex-shrink-0">
+                            <Phone size={14} className="text-lams-gray" />
+                          </span>
+                          <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="+228 XX XX XX XX"
+                            className="flex-1 px-3 py-2.5 text-sm outline-none bg-white text-lams-dark"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Address — always shown */}
+                  <div>
+                    <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">ADRESSE DE LIVRAISON</label>
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={address}
+                          onChange={(e) => { setAddress(e.target.value); setDeliveryLat(null); setDeliveryLng(null) }}
+                          placeholder="Votre adresse de livraison"
+                          className="input-field pr-8 text-sm"
+                        />
+                        {address && (
+                          <button
+                            type="button"
+                            onClick={() => { setAddress(''); setDeliveryLat(null); setDeliveryLng(null) }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-lams-gray hover:text-lams-dark"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowMap(true)}
+                        title="Choisir sur la carte"
+                        className={`flex-shrink-0 flex items-center justify-center w-10 h-10 border transition-all ${
+                          deliveryLat ? 'bg-green-50 border-green-400 text-green-600' : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
+                        }`}
+                      >
+                        <MapPin size={16} />
+                      </button>
                     </div>
-                    <div>
-                      <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">NOTE (optionnel)</label>
-                      <textarea
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="Instructions spéciales..."
-                        rows={2}
-                        className="input-field resize-none"
-                      />
-                    </div>
+                    {deliveryLat && (
+                      <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                        <MapPin size={10} /> Position GPS enregistrée
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">NOTE (optionnel)</label>
+                    <textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Instructions spéciales..."
+                      rows={2}
+                      className="input-field resize-none"
+                    />
                   </div>
 
                   <button
                     onClick={handleCheckout}
                     disabled={ordering}
-                    className="btn-dark w-full flex items-center justify-center gap-2 mt-4"
+                    className="btn-dark w-full flex items-center justify-center gap-2"
                   >
                     {ordering ? (
                       <Loader size={16} className="animate-spin" />
-                    ) : (
+                    ) : payMode === 'NOW' ? (
                       `PAYER ${formatPrice(cartTotal)}`
+                    ) : (
+                      'PASSER LA COMMANDE'
                     )}
                   </button>
 
                   {!session && (
-                    <p className="text-[11px] text-center text-lams-gray mt-3">
+                    <p className="text-[11px] text-center text-lams-gray">
                       <Link href="/login" className="text-lams-dark underline">Connectez-vous</Link> pour commander
                     </p>
                   )}

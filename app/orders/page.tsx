@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Download, Loader, MessageCircle, X, Send, Phone } from 'lucide-react'
+import { Package, Download, Loader, MessageCircle, X, Send, Phone, CreditCard } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -176,6 +176,105 @@ function ChatPanel({ order, onClose, initialText = '' }: {
   )
 }
 
+// ─── Payment modal ───────────────────────────────────────────────────────────
+
+function PaymentModal({ order, onClose, onPaid }: {
+  order: Order
+  onClose: () => void
+  onPaid: (orderId: string) => void
+}) {
+  const [payOp, setPayOp] = useState<'MOOV' | 'YAS'>('MOOV')
+  const [phone, setPhone] = useState('')
+  const [paying, setPaying] = useState(false)
+
+  const pay = async () => {
+    if (!phone.trim()) { toast.error('Entrez votre numéro de téléphone'); return }
+    setPaying(true)
+    try {
+      const res = await fetch('/api/payment/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, operator: payOp, phone: phone.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.message || 'Demande de paiement envoyée sur votre téléphone !')
+        onPaid(order.id)
+        onClose()
+      } else {
+        toast.error(data.message || 'Erreur de paiement. Vérifiez votre numéro.')
+      }
+    } catch {
+      toast.error('Erreur réseau')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-lams-border">
+          <div>
+            <p className="font-semibold text-lams-dark flex items-center gap-2">
+              <CreditCard size={16} className="text-lams-gold" /> Payer la commande
+            </p>
+            <p className="text-[11px] text-lams-gray font-mono mt-0.5">
+              #{order.id.slice(-8).toUpperCase()} · {formatPrice(order.total)}
+            </p>
+          </div>
+          <button onClick={onClose}><X size={18} className="text-lams-gray" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="text-[11px] tracking-widest text-lams-gray block mb-2">OPÉRATEUR MOBILE</label>
+            <div className="flex gap-2">
+              {(['MOOV', 'YAS'] as const).map((op) => (
+                <button
+                  key={op}
+                  onClick={() => setPayOp(op)}
+                  className={`flex-1 py-2.5 text-sm font-medium border transition-colors ${
+                    payOp === op
+                      ? 'bg-lams-dark text-lams-cream border-lams-dark'
+                      : 'border-lams-border text-lams-gray hover:border-lams-dark hover:text-lams-dark'
+                  }`}
+                >
+                  {op === 'MOOV' ? 'MOOV MONEY' : 'YAS PAY'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] tracking-widest text-lams-gray block mb-1.5">
+              NUMÉRO {payOp} *
+            </label>
+            <div className="flex border border-lams-border overflow-hidden">
+              <span className="flex items-center justify-center px-3 bg-lams-cream border-r border-lams-border">
+                <Phone size={14} className="text-lams-gray" />
+              </span>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+228 XX XX XX XX"
+                className="flex-1 px-3 py-2.5 text-sm outline-none"
+                onKeyDown={(e) => { if (e.key === 'Enter') pay() }}
+                autoFocus
+              />
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-5 flex gap-3">
+          <button onClick={onClose} className="btn-outline flex-1">ANNULER</button>
+          <button onClick={pay} disabled={paying || !phone.trim()} className="btn-dark flex-1 disabled:opacity-50">
+            {paying ? <Loader size={15} className="animate-spin mx-auto" /> : `PAYER ${formatPrice(order.total)}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function OrdersPage() {
@@ -191,6 +290,7 @@ export default function OrdersPage() {
   const [ratingVal, setRatingVal] = useState(0)
   const [ratingComment, setRatingComment] = useState('')
   const [submittingRating, setSubmittingRating] = useState(false)
+  const [payingOrder, setPayingOrder] = useState<Order | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') { router.push('/login'); return }
@@ -342,6 +442,17 @@ export default function OrdersPage() {
                         </span>
 
                         <DownloadButton order={order} />
+
+                        {/* Bouton PAYER si paiement en attente */}
+                        {order.paymentStatus === 'PENDING' && order.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => setPayingOrder(order)}
+                            className="flex items-center gap-1.5 text-[11px] tracking-widest text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 transition-all font-semibold"
+                          >
+                            <CreditCard size={13} />
+                            PAYER
+                          </button>
+                        )}
 
                         {/* Message vendeur */}
                         <button
@@ -499,6 +610,19 @@ export default function OrdersPage() {
         </div>
       </main>
       <Footer />
+
+      {/* Payment modal */}
+      {payingOrder && (
+        <PaymentModal
+          order={payingOrder}
+          onClose={() => setPayingOrder(null)}
+          onPaid={(orderId) => {
+            setOrders(prev => prev.map(o =>
+              o.id === orderId ? { ...o, paymentStatus: 'PENDING' as const } : o
+            ))
+          }}
+        />
+      )}
 
       {/* Chat modal */}
       {chatOrder && (
