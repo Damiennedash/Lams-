@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -41,7 +41,7 @@ model Product {
   description String    @db.Text
   price       Float
   category    Category
-  images      String    @db.LongText
+  images      String    @db.Text
   colors      String    @db.Text
   sizes       String    @db.Text
   stock       Int       @default(0)
