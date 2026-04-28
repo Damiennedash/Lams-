@@ -1,14 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" fill="#1A1A1A"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- White background -->
+  <rect width="100" height="100" fill="#ffffff"/>
+
+  <!-- Star / arrow shape -->
+  <polygon
+    points="50,4 62,36 95,36 70,56 80,88 50,68 20,88 30,56 5,36 38,36"
+    fill="#111111"
+  />
+
+  <!-- Orbit ellipse — front half (behind S) -->
+  <ellipse cx="50" cy="55" rx="46" ry="19"
+    fill="none" stroke="#111111" stroke-width="5"
+    stroke-dasharray="145 145" stroke-dashoffset="0"
+  />
+
+  <!-- S letter -->
   <text
-    x="50%"
-    y="52%"
-    dominant-baseline="central"
+    x="50" y="69"
     text-anchor="middle"
-    font-family="Georgia, serif"
-    font-size="18"
-    font-weight="400"
-    fill="#C9A96E"
-    letter-spacing="1"
-  >L</text>
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="46"
+    font-weight="700"
+    fill="#ffffff"
+  >S</text>
+
+  <!-- Orbit ellipse — front half (over S) -->
+  <ellipse cx="50" cy="55" rx="46" ry="19"
+    fill="none" stroke="#111111" stroke-width="5"
+    stroke-dasharray="72 218" stroke-dashoffset="72"
+  />
 </svg>
