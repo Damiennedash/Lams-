@@ -31,6 +31,7 @@ interface Order {
 
 function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClose: () => void }) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [tab, setTab] = useState<'CLIENT' | 'ADMIN'>('CLIENT')
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -50,7 +51,14 @@ function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClo
     return () => window.removeEventListener('lams:newMessage', h)
   }, [order.id])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tab])
+
+  // CLIENT tab: livreur's messages to client (toRole='CUSTOMER')
+  // ADMIN tab: livreur's messages to admin (toRole='ADMIN') + admin's messages to livreur (toRole='LIVREUR')
+  const filtered = messages.filter(m => {
+    if (tab === 'CLIENT') return m.sender.id === myId && m.toRole === 'CUSTOMER'
+    return m.toRole === 'LIVREUR' || (m.sender.id === myId && m.toRole === 'ADMIN')
+  })
 
   const send = async () => {
     if (!text.trim()) return
@@ -59,7 +67,11 @@ function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClo
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id, content: text.trim(), toRole: 'ADMIN' }),
+        body: JSON.stringify({
+          orderId: order.id,
+          content: text.trim(),
+          toRole: tab === 'CLIENT' ? 'CUSTOMER' : 'ADMIN',
+        }),
       })
       const data = await res.json()
       if (data.message) {
@@ -79,14 +91,24 @@ function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClo
           </div>
           <button onClick={onClose}><X size={18} /></button>
         </div>
-        <div className="px-4 py-2 bg-lams-cream/40 border-b border-lams-border">
-          <p className="text-[11px] tracking-widest text-lams-gray">🏪 CONVERSATION ADMIN</p>
+        <div className="flex border-b border-lams-border">
+          {(['CLIENT', 'ADMIN'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
+                tab === t ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
+              }`}
+            >
+              {t === 'CLIENT' ? '👤 CLIENT' : '🏪 ADMIN'}
+            </button>
+          ))}
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-lams-cream/30">
-          {messages.length === 0 && (
-            <p className="text-center text-xs text-lams-gray py-8">Aucun message avec l'admin.</p>
+          {filtered.length === 0 && (
+            <p className="text-center text-xs text-lams-gray py-8">
+              {tab === 'CLIENT' ? 'Aucun message au client.' : "Aucun message avec l'admin."}
+            </p>
           )}
-          {messages.map(msg => {
+          {filtered.map(msg => {
             const isMe = msg.sender.id === myId
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -107,7 +129,7 @@ function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClo
         <div className="flex border-t border-lams-border bg-white">
           <input
             className="flex-1 px-4 py-3 text-sm outline-none"
-            placeholder="Message à l'admin..."
+            placeholder={tab === 'CLIENT' ? 'Message au client...' : "Message à l'admin..."}
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send() } }}

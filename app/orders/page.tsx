@@ -139,7 +139,9 @@ function ChatPanel({ order, onClose, initialText = '' }: {
                   isMe ? 'bg-lams-dark text-lams-cream' : 'bg-white border border-lams-border text-lams-dark'
                 }`}>
                   {!isMe && (
-                    <p className="text-[10px] tracking-widest mb-1 text-lams-gold">VENDEUR</p>
+                    <p className={`text-[10px] tracking-widest mb-1 ${msg.sender.role === 'LIVREUR' ? 'text-blue-500' : 'text-lams-gold'}`}>
+                      {msg.sender.role === 'LIVREUR' ? 'LIVREUR' : 'VENDEUR'}
+                    </p>
                   )}
                   <p className="leading-relaxed">{msg.content}</p>
                   <p className={`text-[10px] mt-1 ${isMe ? 'text-lams-cream/50 text-right' : 'text-lams-gray'}`}>
