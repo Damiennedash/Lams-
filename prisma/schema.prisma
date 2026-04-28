@@ -191,6 +191,7 @@ model Message {
   senderId  String
   content   String   @db.Text
   isAdmin   Boolean  @default(false)
+  toRole    String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
