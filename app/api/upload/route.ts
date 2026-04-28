@@ -5,12 +5,6 @@ import { v2 as cloudinary } from 'cloudinary'
 
 export const dynamic = 'force-dynamic'
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-})
-
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE = 10 * 1024 * 1024
 
@@ -19,6 +13,18 @@ export async function POST(req: NextRequest) {
   if (!session || (session.user as any).role !== 'ADMIN') {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME
+  const apiKey = process.env.CLOUDINARY_API_KEY
+  const apiSecret = process.env.CLOUDINARY_API_SECRET
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    return NextResponse.json({
+      error: `Variables Cloudinary manquantes: ${!cloudName ? 'CLOUD_NAME ' : ''}${!apiKey ? 'API_KEY ' : ''}${!apiSecret ? 'API_SECRET' : ''}`
+    }, { status: 500 })
+  }
+
+  cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret })
 
   try {
     const formData = await req.formData()
@@ -43,8 +49,8 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ url: result.secure_url, success: true })
-  } catch (err) {
+  } catch (err: any) {
     console.error('Upload error:', err)
-    return NextResponse.json({ error: "Erreur lors de l'upload" }, { status: 500 })
+    return NextResponse.json({ error: err?.message ?? "Erreur lors de l'upload" }, { status: 500 })
   }
 }
