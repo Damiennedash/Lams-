@@ -29,16 +29,25 @@ export default function ImageUpload({ value, onChange, label = 'IMAGE', classNam
 
     setUploading(true)
     try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET || 'lams_unsigned'
+
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      fd.append('upload_preset', uploadPreset)
+      fd.append('folder', 'lams-boutique')
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: fd,
+      })
       const data = await res.json()
 
-      if (res.ok && data.url) {
-        onChange(data.url)
+      if (res.ok && data.secure_url) {
+        onChange(data.secure_url)
         toast.success('Image uploadée !')
       } else {
-        toast.error(data.error || "Erreur d'upload")
+        toast.error(data.error?.message || "Erreur d'upload")
       }
     } catch {
       toast.error('Erreur réseau')
