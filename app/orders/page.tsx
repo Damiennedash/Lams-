@@ -20,6 +20,7 @@ interface Message {
   orderId: string
   content: string
   isAdmin: boolean
+  toRole?: string
   createdAt: string
   sender: { id: string; name: string; role: string }
 }
@@ -58,18 +59,15 @@ function DownloadButton({ order }: { order: Order }) {
 
 // ─── Chat panel ───────────────────────────────────────────────────────────────
 
-function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: {
+function ChatPanel({ order, onClose, initialText = '' }: {
   order: Order
   onClose: () => void
-  initialTab?: 'VENDOR' | 'LIVREUR'
   initialText?: string
 }) {
   const { data: session } = useSession()
   const [messages, setMessages] = useState<Message[]>([])
-  const [tab, setTab] = useState<'VENDOR' | 'LIVREUR'>(initialTab)
   const [text, setText] = useState(initialText)
   const [sending, setSending] = useState(false)
-  const [livreurSentIds, setLivreurSentIds] = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
   const myId = (session?.user as any)?.id
 
@@ -93,17 +91,7 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
     return () => window.removeEventListener('lams:newMessage', handler)
   }, [order.id])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tab])
-
-  // Filter messages by tab
-  // Client messages sent before this session default to VENDOR tab
-  // Messages sent from LIVREUR tab are tracked in livreurSentIds
-  const filtered = messages.filter((m) => {
-    if (m.sender.id === myId) {
-      return tab === 'LIVREUR' ? livreurSentIds.has(m.id) : !livreurSentIds.has(m.id)
-    }
-    return tab === 'LIVREUR' ? m.sender.role === 'LIVREUR' : m.sender.role === 'ADMIN'
-  })
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const send = async () => {
     if (!text.trim()) return
@@ -116,9 +104,6 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
       })
       const data = await res.json()
       if (data.message) {
-        if (tab === 'LIVREUR') {
-          setLivreurSentIds((prev) => new Set(Array.from(prev).concat(data.message.id)))
-        }
         setMessages((prev) => [...prev, data.message])
         setText('')
       }
@@ -128,8 +113,6 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
       setSending(false)
     }
   }
-
-  const hasLivreur = !!(order as any).deliveryName
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
@@ -143,49 +126,20 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
           <button onClick={onClose}><X size={18} /></button>
         </div>
 
-        {/* Tabs VENDEUR / LIVREUR */}
-        {hasLivreur && (
-          <div className="flex border-b border-lams-border">
-            <button
-              onClick={() => setTab('VENDOR')}
-              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
-                tab === 'VENDOR' ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
-              }`}
-            >
-              💬 VENDEUR
-            </button>
-            <button
-              onClick={() => setTab('LIVREUR')}
-              className={`flex-1 py-2.5 text-[11px] tracking-widest font-medium transition-colors ${
-                tab === 'LIVREUR' ? 'text-lams-dark border-b-2 border-lams-dark' : 'text-lams-gray hover:text-lams-dark'
-              }`}
-            >
-              🚚 LIVREUR
-            </button>
-          </div>
-        )}
-
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-lams-cream/30">
-          {filtered.length === 0 && (
-            <p className="text-center text-xs text-lams-gray py-8">
-              {tab === 'LIVREUR' ? 'Aucun message avec le livreur.' : 'Aucun message. Écrivez au vendeur !'}
-            </p>
+          {messages.length === 0 && (
+            <p className="text-center text-xs text-lams-gray py-8">Aucun message. Écrivez au vendeur !</p>
           )}
-          {filtered.map((msg) => {
+          {messages.map((msg) => {
             const isMe = msg.sender.id === myId
-            const senderLabel = msg.sender.role === 'LIVREUR' ? 'LIVREUR' : 'VENDEUR'
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] px-3 py-2 text-sm ${
                   isMe ? 'bg-lams-dark text-lams-cream' : 'bg-white border border-lams-border text-lams-dark'
                 }`}>
                   {!isMe && (
-                    <p className={`text-[10px] tracking-widest mb-1 ${
-                      msg.sender.role === 'LIVREUR' ? 'text-blue-500' : 'text-lams-gold'
-                    }`}>
-                      {senderLabel}
-                    </p>
+                    <p className="text-[10px] tracking-widest mb-1 text-lams-gold">VENDEUR</p>
                   )}
                   <p className="leading-relaxed">{msg.content}</p>
                   <p className={`text-[10px] mt-1 ${isMe ? 'text-lams-cream/50 text-right' : 'text-lams-gray'}`}>
@@ -202,7 +156,7 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
         <div className="flex border-t border-lams-border bg-white">
           <input
             className="flex-1 px-4 py-3 text-sm text-lams-dark outline-none bg-transparent"
-            placeholder={tab === 'LIVREUR' ? 'Message au livreur...' : 'Message au vendeur...'}
+            placeholder="Message au vendeur..."
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
@@ -228,7 +182,6 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [chatOrder, setChatOrder] = useState<Order | null>(null)
-  const [chatInitTab, setChatInitTab] = useState<'VENDOR' | 'LIVREUR'>('VENDOR')
   const [chatInitText, setChatInitText] = useState('')
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({})
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -388,10 +341,9 @@ export default function OrdersPage() {
 
                         <DownloadButton order={order} />
 
-                        {/* Message vendeur → onglet VENDEUR */}
+                        {/* Message vendeur */}
                         <button
                           onClick={() => {
-                            setChatInitTab('VENDOR')
                             setChatInitText('')
                             setChatOrder(order)
                             setUnreadMap(prev => { const n = { ...prev }; delete n[order.id]; return n })
@@ -468,10 +420,9 @@ export default function OrdersPage() {
                                 <Phone size={13} />
                                 WHATSAPP
                               </a>
-                              {/* Message in-platform → onglet LIVREUR + texte pré-rempli */}
+                              {/* Message vendeur (texte pré-rempli) */}
                               <button
                                 onClick={() => {
-                                  setChatInitTab('LIVREUR')
                                   setChatInitText(greetingMsg)
                                   setChatOrder(order)
                                   setUnreadMap(prev => { const n = { ...prev }; delete n[order.id]; return n })
@@ -552,7 +503,6 @@ export default function OrdersPage() {
         <ChatPanel
           order={chatOrder}
           onClose={() => { setChatOrder(null); setChatInitText('') }}
-          initialTab={chatInitTab}
           initialText={chatInitText}
         />
       )}

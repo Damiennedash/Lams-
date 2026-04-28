@@ -13,6 +13,7 @@ const statusOptions = ['PENDING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLE
 
 interface Message {
   id: string; orderId: string; content: string; isAdmin: boolean
+  toRole?: string
   createdAt: string; sender: { id: string; name: string; role: string }
 }
 interface Deliverer { id: string; name: string; phone: string; userId?: string }
@@ -24,7 +25,6 @@ function AdminChatPanel({ order, onClose }: { order: Order; onClose: () => void 
   const [tab, setTab] = useState<'CLIENT' | 'LIVREUR'>('CLIENT')
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [livreurSentIds, setLivreurSentIds] = useState<Set<string>>(new Set())
   const { data: session } = useSession()
   const myId = (session?.user as any)?.id ?? ''
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -49,13 +49,11 @@ function AdminChatPanel({ order, onClose }: { order: Order; onClose: () => void 
 
   const hasLivreur = !!(order as any).delivererId
 
-  // CLIENT tab: customer messages + admin's own messages sent to client
-  // LIVREUR tab: livreur messages + admin's own messages sent to livreur
+  // CLIENT tab: customer↔admin messages (toRole='CUSTOMER' or sender is customer)
+  // LIVREUR tab: livreur↔admin messages (toRole='LIVREUR' or sender is livreur)
   const filtered = messages.filter(m => {
-    if (m.sender.id === myId) {
-      return tab === 'LIVREUR' ? livreurSentIds.has(m.id) : !livreurSentIds.has(m.id)
-    }
-    return tab === 'LIVREUR' ? m.sender.role === 'LIVREUR' : m.sender.role === 'CUSTOMER'
+    if (tab === 'LIVREUR') return m.toRole === 'LIVREUR' || m.sender.role === 'LIVREUR'
+    return m.toRole === 'CUSTOMER' || m.sender.role === 'CUSTOMER'
   })
 
   const send = async () => {
@@ -73,7 +71,6 @@ function AdminChatPanel({ order, onClose }: { order: Order; onClose: () => void 
       })
       const data = await res.json()
       if (data.message) {
-        if (tab === 'LIVREUR') setLivreurSentIds(p => new Set(Array.from(p).concat(data.message.id)))
         setMessages(prev => [...prev, data.message])
         setText('')
       }

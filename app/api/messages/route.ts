@@ -24,8 +24,21 @@ export async function GET(req: NextRequest) {
   const canAccess = isAdmin || isLivreur || order.userId === userId
   if (!canAccess) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
 
+  // Build where clause based on role
+  // toRole field: 'CUSTOMER' = admin→customer, 'LIVREUR' = admin→livreur,
+  //               'ADMIN' = customer→admin or livreur→admin
+  let where: any = { orderId }
+  if (isLivreur) {
+    // Livreur sees only their own messages + messages explicitly sent to them
+    where.OR = [{ senderId: userId }, { toRole: 'LIVREUR' }]
+  } else if (!isAdmin) {
+    // Customer sees only their own messages + messages explicitly sent to them
+    where.OR = [{ senderId: userId }, { toRole: 'CUSTOMER' }]
+  }
+  // Admin sees all messages (no extra filter)
+
   const messages = await prisma.message.findMany({
-    where: { orderId },
+    where,
     include: { sender: { select: { id: true, name: true, role: true } } },
     orderBy: { createdAt: 'asc' },
   })
@@ -40,7 +53,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/messages
 // Body: { orderId, content, toRole? }
-// toRole = 'CUSTOMER' | 'ADMIN' | 'LIVREUR' — routes the SSE push
+// toRole = 'CUSTOMER' | 'LIVREUR' | 'ADMIN'
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -63,49 +76,61 @@ export async function POST(req: NextRequest) {
   const canAccess = isAdmin || isLivreur || order.userId === userId
   if (!canAccess) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
 
+  // Determine who this message is addressed to
+  let resolvedToRole: string
+  if (isAdmin) {
+    resolvedToRole = toRole === 'LIVREUR' ? 'LIVREUR' : 'CUSTOMER'
+  } else if (isLivreur) {
+    resolvedToRole = 'ADMIN'
+  } else {
+    // Customer
+    resolvedToRole = 'ADMIN'
+  }
+
   const message = await prisma.message.create({
-    data: { orderId, senderId: userId, content: content.trim(), isAdmin: isAdmin || isLivreur },
+    data: {
+      orderId,
+      senderId: userId,
+      content: content.trim(),
+      isAdmin: isAdmin || isLivreur,
+      toRole: resolvedToRole,
+    },
     include: { sender: { select: { id: true, name: true, role: true } } },
   })
 
   const ssePayload = {
     type: 'new_message',
     message: {
-      id: message.id, orderId: message.orderId,
-      content: message.content, isAdmin: message.isAdmin,
-      createdAt: message.createdAt.toISOString(), sender: message.sender,
+      id: message.id,
+      orderId: message.orderId,
+      content: message.content,
+      isAdmin: message.isAdmin,
+      toRole: message.toRole,
+      createdAt: message.createdAt.toISOString(),
+      sender: message.sender,
     },
   }
 
   if (isAdmin) {
-    if (toRole === 'LIVREUR') {
-      // Admin → livreur private message
+    if (resolvedToRole === 'LIVREUR') {
+      // Admin → livreur: push to livreur + other admins
       if (order.delivererId) pushToUser(order.delivererId, ssePayload)
+      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
+      admins.forEach(a => { if (a.id !== userId) pushToUser(a.id, ssePayload) })
     } else {
-      // Admin → customer (default)
+      // Admin → customer: push to customer + other admins only (NOT livreur)
       pushToUser(order.userId, ssePayload)
-      // Also push to other admins
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
       admins.forEach(a => { if (a.id !== userId) pushToUser(a.id, ssePayload) })
     }
   } else if (isLivreur) {
-    if (toRole === 'ADMIN') {
-      // Livreur → admin private: only admins
-      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
-      admins.forEach(a => pushToUser(a.id, ssePayload))
-    } else {
-      // Livreur → customer: customer + admins (admin monitors all livreur↔customer comms)
-      pushToUser(order.userId, ssePayload)
-      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
-      admins.forEach(a => pushToUser(a.id, ssePayload))
-    }
-  } else {
-    // Customer → push to all admins and assigned livreur
+    // Livreur → admin: push to admins only (NOT customer)
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
     admins.forEach(a => pushToUser(a.id, ssePayload))
-    if (order.delivererId && order.delivererId !== userId) {
-      pushToUser(order.delivererId, ssePayload)
-    }
+  } else {
+    // Customer → admin: push to admins only (NOT livreur)
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
+    admins.forEach(a => pushToUser(a.id, ssePayload))
   }
 
   return NextResponse.json({ message })
