@@ -17,8 +17,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!order || order.userId !== userId) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
   }
-  if (order.status !== 'PENDING') {
-    return NextResponse.json({ error: 'Seules les commandes en attente peuvent être modifiées.' }, { status: 400 })
+  if (!['PENDING', 'CONFIRMED'].includes(order.status)) {
+    return NextResponse.json({ error: 'Seules les commandes en attente ou confirmées peuvent être modifiées.' }, { status: 400 })
   }
 
   const { deliveryAddress, deliveryLat, deliveryLng, note } = await req.json()

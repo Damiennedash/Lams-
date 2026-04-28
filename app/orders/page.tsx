@@ -550,7 +550,8 @@ export default function OrdersPage() {
           ) : (
             <div className="space-y-6">
               {orders.map((order) => {
-                const canCancel = ['PENDING', 'CONFIRMED'].includes(order.status)
+                const canCancel = ['PENDING', 'CONFIRMED', 'SHIPPED'].includes(order.status)
+                const canEdit   = ['PENDING', 'CONFIRMED'].includes(order.status)
                 const isShipped = order.status === 'SHIPPED' || order.status === 'DELIVERED'
                 const mapsLink = (order as any).deliveryLat && (order as any).deliveryLng
                   ? `https://www.google.com/maps?q=${(order as any).deliveryLat},${(order as any).deliveryLng}`
@@ -639,8 +640,8 @@ export default function OrdersPage() {
                           </span>
                         )}
 
-                        {/* Modifier (PENDING seulement) */}
-                        {order.status === 'PENDING' && (
+                        {/* Modifier (PENDING + CONFIRMED) */}
+                        {canEdit && (
                           <button
                             onClick={() => setEditOrder(order)}
                             className="flex items-center gap-1.5 text-[11px] tracking-widest text-lams-dark border border-lams-border hover:border-lams-dark px-3 py-1.5 transition-all"

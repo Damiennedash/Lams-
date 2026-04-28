@@ -16,7 +16,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
   if (!order) return NextResponse.json({ error: 'Commande introuvable' }, { status: 404 })
   if (order.userId !== userId) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
 
-  if (!['PENDING', 'CONFIRMED'].includes(order.status)) {
+  if (!['PENDING', 'CONFIRMED', 'SHIPPED'].includes(order.status)) {
     return NextResponse.json(
       { error: 'Cette commande ne peut plus être annulée.' },
       { status: 400 }
