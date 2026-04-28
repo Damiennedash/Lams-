@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { pushToUser } from '@/lib/sse'
 
+export const dynamic = 'force-dynamic'
+
 // PATCH /api/livreur/orders/[id] — livreur marks order as DELIVERED
 export async function PATCH(_: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)

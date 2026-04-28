@@ -5,6 +5,8 @@ import { prisma } from '@/lib/db'
 import { sendOrderConfirmation } from '@/lib/email'
 import { pushToUser } from '@/lib/sse'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })

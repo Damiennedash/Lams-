@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { pushToUser } from '@/lib/sse'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/messages?orderId=xxx
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)

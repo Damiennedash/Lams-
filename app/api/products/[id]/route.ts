@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const product = await prisma.product.findUnique({ where: { id: params.id } })
   if (!product) return NextResponse.json({ error: 'Produit introuvable' }, { status: 404 })

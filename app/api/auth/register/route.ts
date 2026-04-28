@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { generateUniqueId } from '@/lib/utils'
 import { sendWelcomeEmail } from '@/lib/email'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const { name, email, password, phone } = await req.json()

@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
+export const dynamic = 'force-dynamic'
+
 function genUniqueId() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let id = 'LIV-'
