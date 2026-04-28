@@ -29,11 +29,16 @@ export async function GET(req: NextRequest) {
   //               'ADMIN' = customer→admin or livreur→admin
   let where: any = { orderId }
   if (isLivreur) {
-    // Livreur sees only their own messages + messages explicitly sent to them
+    // Livreur: own messages + admin→livreur + legacy null-toRole messages they sent
     where.OR = [{ senderId: userId }, { toRole: 'LIVREUR' }]
   } else if (!isAdmin) {
-    // Customer sees only their own messages + messages explicitly sent to them
-    where.OR = [{ senderId: userId }, { toRole: 'CUSTOMER' }]
+    // Customer: own messages + admin/livreur→customer + legacy messages (toRole=null, isAdmin=true)
+    // Legacy = messages sent before the toRole fix was deployed (have toRole: null)
+    where.OR = [
+      { senderId: userId },
+      { toRole: 'CUSTOMER' },
+      { toRole: null, isAdmin: true },
+    ]
   }
   // Admin sees all messages (no extra filter)
 
