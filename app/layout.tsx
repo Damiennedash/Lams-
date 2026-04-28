@@ -41,7 +41,11 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
-  icons: { icon: '/favicon.ico' },
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 }
 
 const orgJsonLd = {
