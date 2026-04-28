@@ -75,7 +75,7 @@ function ChatPanel({ order, myId, onClose }: { order: Order; myId: string; onClo
       })
       const data = await res.json()
       if (data.message) {
-        if (tab === 'ADMIN') setAdminSentIds(p => new Set([...p, data.message.id]))
+        if (tab === 'ADMIN') setAdminSentIds(p => new Set(Array.from(p).concat(data.message.id)))
         setMessages(p => [...p, data.message])
         setText('')
       }

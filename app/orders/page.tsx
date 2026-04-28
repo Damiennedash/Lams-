@@ -117,7 +117,7 @@ function ChatPanel({ order, onClose, initialTab = 'VENDOR', initialText = '' }: 
       const data = await res.json()
       if (data.message) {
         if (tab === 'LIVREUR') {
-          setLivreurSentIds((prev) => new Set([...prev, data.message.id]))
+          setLivreurSentIds((prev) => new Set(Array.from(prev).concat(data.message.id)))
         }
         setMessages((prev) => [...prev, data.message])
         setText('')

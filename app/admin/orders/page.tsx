@@ -73,7 +73,7 @@ function AdminChatPanel({ order, onClose }: { order: Order; onClose: () => void 
       })
       const data = await res.json()
       if (data.message) {
-        if (tab === 'LIVREUR') setLivreurSentIds(p => new Set([...p, data.message.id]))
+        if (tab === 'LIVREUR') setLivreurSentIds(p => new Set(Array.from(p).concat(data.message.id)))
         setMessages(prev => [...prev, data.message])
         setText('')
       }
