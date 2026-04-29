@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '12')
 
-  const where: any = { active: true }
+  const where: any = { active: true, stock: { gt: 0 } }
   if (category) where.category = category
   if (search) {
     where.OR = [
