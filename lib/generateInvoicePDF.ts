@@ -12,6 +12,11 @@ export async function downloadInvoicePDF(order: Order) {
   const contentW = W - margin * 2
   let y = 0
 
+  // jsPDF doesn't render Unicode thin-space (U+202F) from toLocaleString('fr')
+  // Use a plain regex-based formatter instead
+  const fmt = (n: number) =>
+    Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+
   // ── Palette ──
   const dark = [26, 26, 26] as const        // #1A1A1A
   const gold = [201, 169, 110] as const     // #C9A96E
@@ -187,12 +192,11 @@ export async function downloadInvoicePDF(order: Order) {
     doc.text(String(item.quantity), colQtyX, y + 7.5, { align: 'center' })
 
     // Unit price — short format
-    const puText = `${item.price.toLocaleString('fr')} F`
-    doc.text(puText, colPuX, y + 7.5, { align: 'center' })
+    doc.text(`${fmt(item.price)} F`, colPuX, y + 7.5, { align: 'center' })
 
     // Line total
     doc.setFont('helvetica', 'bold')
-    doc.text(`${(item.price * item.quantity).toLocaleString('fr')} F`, colTotX, y + 7.5, { align: 'right' })
+    doc.text(`${fmt(item.price * item.quantity)} F`, colTotX, y + 7.5, { align: 'right' })
 
     y += rowH
   })
@@ -210,7 +214,7 @@ export async function downloadInvoicePDF(order: Order) {
 
   doc.setFontSize(12)
   setTxt(...gold)
-  doc.text(`${order.total.toLocaleString()} FCFA`, margin + contentW - 5, y + 8.5, { align: 'right' })
+  doc.text(`${fmt(order.total)} FCFA`, margin + contentW - 5, y + 8.5, { align: 'right' })
 
   y += 20
 

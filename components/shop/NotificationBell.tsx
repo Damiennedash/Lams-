@@ -93,7 +93,14 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-lams-dark border border-white/10 shadow-xl z-50 max-h-96 overflow-hidden flex flex-col">
+        <>
+          {/* Mobile backdrop */}
+          <div className="fixed inset-0 z-40 sm:hidden" onClick={close} />
+          <div className="
+            fixed left-2 right-2 top-[4.5rem] z-50
+            sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80
+            bg-lams-dark border border-white/10 shadow-xl max-h-[70vh] sm:max-h-96 overflow-hidden flex flex-col
+          ">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <span className="text-lams-cream text-[11px] tracking-[0.2em]">NOTIFICATIONS</span>
             <button onClick={close} className="text-lams-gray hover:text-lams-cream">
@@ -125,7 +132,8 @@ export default function NotificationBell() {
               </Link>
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   )
