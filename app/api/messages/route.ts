@@ -131,10 +131,8 @@ export async function POST(req: NextRequest) {
     }
   } else if (isLivreur) {
     if (resolvedToRole === 'CUSTOMER') {
-      // Livreur → customer: push to customer + admins (admin monitors)
+      // Livreur → customer: push to customer only (private, admin doesn't see it)
       pushToUser(order.userId, ssePayload)
-      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
-      admins.forEach(a => pushToUser(a.id, ssePayload))
     } else {
       // Livreur → admin: push to admins only
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
@@ -142,10 +140,8 @@ export async function POST(req: NextRequest) {
     }
   } else {
     if (resolvedToRole === 'LIVREUR') {
-      // Customer → livreur: push to livreur + admins (monitoring)
+      // Customer → livreur: push to livreur only (private, admin doesn't see it)
       if (order.delivererId) pushToUser(order.delivererId, ssePayload)
-      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })
-      admins.forEach(a => pushToUser(a.id, ssePayload))
     } else {
       // Customer → admin: push to admins only
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } })

@@ -49,13 +49,14 @@ function AdminChatPanel({ order, onClose }: { order: Order; onClose: () => void 
 
   const hasLivreur = !!(order as any).delivererId
 
-  // LIVREUR tab: only admin↔livreur (exclude client→livreur messages)
-  // CLIENT tab: only admin↔customer (exclude client→livreur messages)
+  // LIVREUR tab: only admin↔livreur
+  // CLIENT tab: only admin↔customer (exclude livreur↔customer messages)
   const filtered = messages.filter(m => {
     if (tab === 'LIVREUR') {
       return (m.toRole === 'LIVREUR' && m.sender.role !== 'CUSTOMER') || m.sender.role === 'LIVREUR'
     }
-    return (m.toRole === 'CUSTOMER') || (m.sender.role === 'CUSTOMER' && m.toRole !== 'LIVREUR')
+    return (m.toRole === 'CUSTOMER' && m.sender.role !== 'LIVREUR') ||
+           (m.sender.role === 'CUSTOMER' && m.toRole !== 'LIVREUR')
   })
 
   const send = async () => {
@@ -340,8 +341,9 @@ export default function AdminOrdersPage() {
       if (countedMsgIds.current.has(msg.id)) return
       if (chatOrderRef.current?.id === msg.orderId) return
       if (msg.sender?.role === 'ADMIN') return
-      // Don't badge client→livreur messages (not directed to admin)
+      // Only badge messages directed to admin (exclude private livreur↔customer lane)
       if ((msg as any).toRole === 'LIVREUR' && msg.sender?.role === 'CUSTOMER') return
+      if ((msg as any).toRole === 'CUSTOMER' && msg.sender?.role === 'LIVREUR') return
       countedMsgIds.current.add(msg.id)
       setUnreadMap(prev => ({ ...prev, [msg.orderId]: (prev[msg.orderId] ?? 0) + 1 }))
     }
