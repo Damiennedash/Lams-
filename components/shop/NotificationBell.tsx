@@ -48,10 +48,16 @@ export default function NotificationBell() {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch('/api/notifications')
-      .then((r) => r.json())
-      .then((data) => { if (data.notifications) setNotifications(data.notifications) })
-      .catch(() => {})
+    const fetchNotifs = () => {
+      fetch('/api/notifications')
+        .then((r) => r.json())
+        .then((data) => { if (data.notifications) setNotifications(data.notifications) })
+        .catch(() => {})
+    }
+    fetchNotifs()
+    // Refresh on poll so badge stays up to date (SSE doesn't cross Vercel instances)
+    window.addEventListener('lams:poll', fetchNotifs)
+    return () => window.removeEventListener('lams:poll', fetchNotifs)
   }, [setNotifications])
 
   useEffect(() => {
